@@ -6,8 +6,8 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="管報自動化系統", layout="wide")
 
-st.title("📊 管報自動化：雲端報表生成器")
-st.markdown("上傳明細資料後，系統將自動彙總並**直接更新至指定的 Google Sheets**。")
+st.title("管報自動化：雲端報表生成器")
+st.markdown("上傳明細資料後，系統將自動彙總並直接更新至指定的 Google Sheets。")
 
 # 設定您的目標 Google Sheets 網址 (請替換為您實際的網址)
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/您的試算表ID/edit"
@@ -26,7 +26,7 @@ if uploaded_file is not None:
     st.success(f"成功讀取檔案！共 {len(df)} 筆資料。")
 
     # --- 步驟 2：設定彙總邏輯 ---
-    st.subheader("⚙️ 報表彙總運算")
+    st.subheader("報表彙總運算")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -40,13 +40,12 @@ if uploaded_file is not None:
     # --- 步驟 3：產出與寫入 Google Sheets ---
     if group_cols and val_col:
         company_df = df.groupby(group_cols)[val_col].sum().reset_index()
-        st.dataframe(company_df.head(5), use_container_width=True) # 預覽前五筆
+        st.dataframe(company_df.head(5), use_container_width=True) 
         
-        # 觸發寫入動作的按鈕
-        if st.button("🚀 彙總並寫入 Google Sheets", type="primary"):
+        if st.button("彙總並寫入 Google Sheets", type="primary"):
             with st.spinner("正在連線 Google API 並寫入資料庫..."):
                 try:
-                    # 1. 建立 GCP 憑證授權 (讀取 Streamlit Secrets)
+                    # 1. 建立 GCP 憑證授權 
                     scopes = [
                         'https://www.googleapis.com/auth/spreadsheets',
                         'https://www.googleapis.com/auth/drive'
@@ -60,5 +59,19 @@ if uploaded_file is not None:
                     # 2. 開啟目標 Google Sheets
                     spreadsheet = client.open_by_url(TARGET_SHEET_URL)
 
-                    # 3. 指定工作表 (Sheet name)
-                    # 建議寫入一個隱藏的 Raw Data 表，不要直接蓋掉主管看的
+                    # 3. 指定工作表
+                    sheet_name = "全公司彙總_Raw"
+                    try:
+                        worksheet = spreadsheet.worksheet(sheet_name)
+                    except gspread.exceptions.WorksheetNotFound:
+                        worksheet = spreadsheet.add_worksheet(title=sheet_name, rows="1000", cols="20")
+
+                    # 4. 寫入邏輯：先清空舊資料，再貼上新資料
+                    worksheet.clear()
+                    set_with_dataframe(worksheet, company_df)
+
+                    st.success("寫入成功！雲端報表已更新。")
+                    st.markdown(f"[點擊這裡前往查看 Google Sheets]({TARGET_SHEET_URL})")
+
+                except Exception as e:
+                    st.error(f"寫入失敗，請檢查 API 權限或金鑰設定：\n{e}")
